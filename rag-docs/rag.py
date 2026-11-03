@@ -1,75 +1,36 @@
-"""Answer questions using retrieved notes and the Groq chat-completions API."""
+from memory import load_memory
 
-import os
+def answer_with_history(messages):
+    api_key = _get_api_key()
+    if not api_key:
+        return "API Key missing!"
 
-import streamlit as st
-from dotenv import load_dotenv
-from openai import OpenAI
-from streamlit.errors import StreamlitSecretNotFoundError
+    client = OpenAI(api_key=api_key, base_url=BASE_URL)
+    
+    latest_question = messages[-1]["content"] if messages else ""
+    
+    # నాలెడ్జ్ బేస్ నుండి నోట్స్ తీసుకోవడం
+    search_results = search(latest_question, k=2)
+    context_text = "\n".join([chunk for _, chunk in search_results]) if search_results else ""
 
-from search import search
+    # పర్మినెంట్ యూజర్ మెమరీని లోడ్ చేయడం
+    user_memory = load_memory()
 
-load_dotenv()
-
-MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
-MIN_SCORE = float(os.getenv("MIN_SCORE", "0.60"))
-BASE_URL = "https://api.groq.com/openai/v1"
-SYSTEM_PROMPT = (
-    "Answer using only the supplied context. Cite supporting context with [1], [2], "
-    "and so on. If the context does not contain the answer, say you don't know."
-)
-UNKNOWN_ANSWER = "I don't know based on the documents."
-
-
-def _get_api_key() -> str:
-    """Prefer Streamlit secrets, with environment variables as a local fallback."""
-    try:
-        api_key = st.secrets.get("GROQ_API_KEY")
-    except StreamlitSecretNotFoundError:
-        api_key = None
-
-    api_key = api_key or os.getenv("GROQ_API_KEY")
-    if not api_key or not api_key.strip():
-        raise RuntimeError(
-            "GROQ_API_KEY is not configured. Add it to Streamlit secrets or the environment."
-        )
-    return api_key.strip()
-
-
-def answer(question: str) -> str:
-    """Retrieve relevant notes and generate a grounded answer with Groq."""
-    if not isinstance(question, str):
-        raise TypeError("question must be a string.")
-    question = question.strip()
-    if not question:
-        raise ValueError("Question cannot be blank.")
-
-    results = [result for result in search(question) if result[0] >= MIN_SCORE]
-    if not results:
-        return UNKNOWN_ANSWER
-
-    context = "\n\n".join(
-        f"[{index}] {chunk}"
-        for index, (_, chunk) in enumerate(results, start=1)
+    # సిస్టమ్ ప్రాంప్ట్‌లో మెమరీని కూడా ఇన్‌క్లూడ్ చేయడం
+    SYSTEM_PROMPT = (
+        "You are a friendly, intelligent, and helpful AI assistant, like Gemini. "
+        f"Here is what you remember about the user and their preferences:\n{user_memory}\n\n"
+        "Use the provided context or memory if it helps answer the user's question accurately."
     )
-    client = OpenAI(
-        api_key=_get_api_key(),
-        base_url=BASE_URL,
-        timeout=30.0,
-        max_retries=0,
-    )
+
+    api_messages = [{"role": "system", "content": SYSTEM_PROMPT + f"\n\nContext notes:\n{context_text}"}]
+    
+    for msg in messages:
+        api_messages.append({"role": msg["role"], "content": msg["content"]})
+
     response = client.chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Context:\n{context}\n\nQuestion: {question}",
-            },
-        ],
-        temperature=0.2,
+        messages=api_messages,
+        temperature=0.7,
     )
-    content = response.choices[0].message.content
-    if not content:
-        raise RuntimeError("Groq returned an empty response.")
-    return content.strip()
+    return response.choices[0].message.content.strip()

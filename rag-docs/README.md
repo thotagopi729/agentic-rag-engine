@@ -1,22 +1,16 @@
-# RAG Document QA API (FastAPI + Groq + Vector Search)
+# RAG Document QA (Streamlit + Groq + Keyword Search)
 
-A production-style Retrieval-Augmented Generation (RAG) system built over AI Agent documentation. It includes semantic chunking, cosine similarity filtering, an automated evaluation suite, holdout validation, a FastAPI REST interface, and Docker support.
+A Retrieval-Augmented Generation (RAG) chatbot built over the local `notes.txt` knowledge base.
 
 ## Architecture
-- **Retrieval (search.py)**: Embeds document chunks (notes.txt, 58 chunks) and retrieves top matches via cosine similarity.
-- **Defense-in-Depth Generation (rag.py)**: Filters chunks below MIN_SCORE = 0.60 and instructs the LLM (openai/gpt-oss-20b via Groq) to answer strictly from context with inline citations ([1], [2]) or abstain.
-- **REST API (api.py)**: Exposes GET /health and POST /ask with Pydantic validation.
-
-## Threshold Sweep & Evaluation Results
-| MIN_SCORE | Eval Score (eval.py) | Holdout Score (holdout.py) | Key Observation |
-| :--- | :--- | :--- | :--- |
-| 0.70 | 15 / 19 | - | Too strict; drops valid paraphrase & buried-detail chunks |
-| 0.65 | 18 / 19 | - | Baseline; misses the Replit paraphrase case |
-| **0.60 (Chosen)** | **19 / 19** | **5 / 5** | **Optimal boundary: 100% accuracy on tuning & unseen holdout sets** |
-| 0.55 | 19 / 19 | 5 / 5 | Prompt guard holds, but lower threshold risks noisy context |
+- **Retrieval (`search.py`)**: Reads `notes.txt` relative to the source file's absolute location, chunks it, and ranks matches by keyword coverage.
+- **Answer generation (`rag.py`)**: Uses the Groq-compatible OpenAI client, applies `MIN_SCORE`, cites retrieved context, and abstains when no relevant chunks are found.
+- **Chat UI (`app.py`)**: Maintains conversation history in Streamlit session state.
+- **REST API (`api.py`)**: The optional FastAPI interface exposes `GET /health` and `POST /ask`.
 
 ## Quickstart
-1. Install dependencies: python -m pip install -r requirements.txt
-2. Start API server: python -m uvicorn api:app --reload
-3. Run evaluations: python eval.py && python holdout.py
-4. Run API tests: python -m pytest -v
+1. Install dependencies: `python -m pip install -r requirements.txt`
+2. Set `GROQ_API_KEY` in Streamlit secrets or the environment.
+3. Start the chat app: `streamlit run app.py`
+
+The optional API can be started with `python -m uvicorn api:app --reload`.

@@ -44,3 +44,9 @@ if __name__ == "__main__":
         if q == "quit":
             break
         print("\n" + answer(q))
+        
+        
+def chat(messages):
+    msgs = [{"role": "system", "content": "You are a helpful, concise assistant."}] + messages
+    response = client.chat.completions.create(model=MODEL, messages=msgs, temperature=0.7)
+    return response.choices[0].message.content

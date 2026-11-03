@@ -1,36 +1,46 @@
-from memory import load_memory
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from search import search
 
-def answer_with_history(messages):
-    api_key = _get_api_key()
-    if not api_key:
-        return "API Key missing!"
+load_dotenv()
+client = OpenAI(
+       api_key=os.getenv("GROQ_API_KEY"),
+       base_url="https://api.groq.com/openai/v1",
+)
 
-    client = OpenAI(api_key=api_key, base_url=BASE_URL)
-    
-    latest_question = messages[-1]["content"] if messages else ""
-    
-    # నాలెడ్జ్ బేస్ నుండి నోట్స్ తీసుకోవడం
-    search_results = search(latest_question, k=2)
-    context_text = "\n".join([chunk for _, chunk in search_results]) if search_results else ""
+MODEL = "openai/gpt-oss-20b"
+MIN_SCORE = float(os.getenv("MIN_SCORE", "0.60"))
 
-    # పర్మినెంట్ యూజర్ మెమరీని లోడ్ చేయడం
-    user_memory = load_memory()
+SYSTEM = (
+    "Answer using ONLY the context provided. "
+    "Cite sources like [1] or [2]. "
+    "If the context does not contain the answer, say you don't know."
+)
 
-    # సిస్టమ్ ప్రాంప్ట్‌లో మెమరీని కూడా ఇన్‌క్లూడ్ చేయడం
-    SYSTEM_PROMPT = (
-        "You are a friendly, intelligent, and helpful AI assistant, like Gemini. "
-        f"Here is what you remember about the user and their preferences:\n{user_memory}\n\n"
-        "Use the provided context or memory if it helps answer the user's question accurately."
+
+def answer(question):
+    results = [r for r in search(question, k=4) if r[0] >= MIN_SCORE]
+    if not results:
+        return "I don't know based on the documents."
+
+    context = "\n\n".join(
+        f"[{i + 1}] {chunk}" for i, (score, chunk) in enumerate(results)
     )
-
-    api_messages = [{"role": "system", "content": SYSTEM_PROMPT + f"\n\nContext notes:\n{context_text}"}]
-    
-    for msg in messages:
-        api_messages.append({"role": msg["role"], "content": msg["content"]})
-
     response = client.chat.completions.create(
         model=MODEL,
-        messages=api_messages,
-        temperature=0.7,
+        messages=[
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
+        ],
+        temperature=0.2,
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content
+
+
+if __name__ == "__main__":
+    while True:
+        q = input("\nAsk (or 'quit'): ")
+        if q == "quit":
+            break
+        print("\n" + answer(q))

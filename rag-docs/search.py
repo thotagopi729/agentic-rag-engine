@@ -2,7 +2,13 @@ import numpy as np
 from fastembed import TextEmbedding
 from chunker import chunk_text
 
-text = open("notes.txt", encoding="utf-8").read()
+import os
+
+# Get the directory where search.py is currently located
+current_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(current_dir, "notes.txt")
+
+text = open(file_path, encoding="utf-8").read()
 chunks = chunk_text(text)
 
 model = TextEmbedding("BAAI/bge-small-en-v1.5")

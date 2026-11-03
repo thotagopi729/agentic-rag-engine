@@ -10,7 +10,7 @@ client = OpenAI(
 )
 
 MODEL = "openai/gpt-oss-20b"
-MIN_SCORE = 0.65
+MIN_SCORE = float(os.getenv("MIN_SCORE", "0.60"))
 
 SYSTEM = (
     "Answer using ONLY the context provided. "
